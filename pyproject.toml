@@ -35,6 +35,7 @@ dependencies = [
     "langchain-core>=0.3",
     "transformers>=4.40",
     "torch>=2.0",
+    "huggingface-hub>=0.23",     # snapshot_download for HF-hosted checkpoints
 
     # --- Observability ---
     "structlog>=24.0",
@@ -71,12 +72,31 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "TCH"]
 [tool.ruff.lint.isort]
 known-first-party = ["priormail"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's Depends()/Query() in argument defaults is the intended pattern.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
+
+[tool.ruff.lint.flake8-type-checking]
+runtime-evaluated-base-classes = ["pydantic.BaseModel"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI evaluates endpoint/dependency annotations at runtime (e.g. Request,
+# the injected Classifier type), so those imports must stay outside a
+# TYPE_CHECKING block — exempt them from the type-checking-import rules.
+"src/priormail/api/*.py" = ["TC001", "TC002"]
+"src/priormail/core/deps.py" = ["TC001", "TC002"]
+
 # --- Mypy ---
 [tool.mypy]
 python_version = "3.11"
 strict = true
 plugins = ["pydantic.mypy"]
 mypy_path = "src"
+
+# Third-party libraries without type stubs.
+[[tool.mypy.overrides]]
+module = ["transformers.*", "torch.*", "huggingface_hub.*"]
+ignore_missing_imports = true
 
 # --- Pytest ---
 [tool.pytest.ini_options]
