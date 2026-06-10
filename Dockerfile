@@ -15,7 +15,7 @@ ENV HF_HOME=/tmp/hf_cache \
 WORKDIR /app
 
 # Copy dependency manifest first for layer-cache efficiency.
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
 COPY src/ ./src/
 
 # 1. CPU-only PyTorch (~220 MB) — must come before the general install so pip
