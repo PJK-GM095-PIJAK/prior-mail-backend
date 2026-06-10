@@ -1,3 +1,13 @@
+---
+title: PriorMail Backend
+emoji: 📧
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # PriorMail Backend
 
 FastAPI backend for PriorMail. See [CLAUDE.md](CLAUDE.md) for the full project guide.
