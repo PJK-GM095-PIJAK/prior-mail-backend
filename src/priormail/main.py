@@ -20,7 +20,8 @@ from priormail.api import classify, health
 from priormail.core.config import get_settings
 from priormail.core.errors import AppError, ValidationError
 from priormail.core.logging import configure_logging, get_logger
-from priormail.models.envelope import failure
+from priormail.models.orm.db import create_db_engine
+from priormail.models.schemas.envelope import failure
 from priormail.services.classifier import load_priority_classifier
 
 if TYPE_CHECKING:
@@ -31,16 +32,27 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Load models on startup; a failure propagates and aborts boot."""
+    """Load models and initialise DB on startup; clean up on shutdown."""
     settings = get_settings()
     configure_logging(
         log_level=settings.log_level,
         json_logs=settings.environment != "development",
     )
-    # Raises ModelUnavailableError on failure -> app refuses to start (exits non-zero).
+
+    # Database — engine + session factory stored on app.state for DI (core/deps.py).
+    engine, session_factory = create_db_engine(settings)
+    app.state.db_engine = engine
+    app.state.db_session_factory = session_factory
+    logger.info("db_engine_created", database_url="***")
+
+    # ML model — raises ModelUnavailableError on failure → app refuses to start.
     app.state.priority_classifier = load_priority_classifier(settings)
+
     logger.info("app_started", environment=settings.environment)
     yield
+
+    # Shutdown
+    await engine.dispose()
     logger.info("app_stopping")
 
 

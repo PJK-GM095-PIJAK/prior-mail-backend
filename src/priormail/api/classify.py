@@ -12,8 +12,8 @@ import asyncio
 from fastapi import APIRouter, Depends
 
 from priormail.core.deps import get_priority_classifier
-from priormail.models.envelope import Envelope, success
-from priormail.models.priority import ClassifyData, ClassifyRequest
+from priormail.models.schemas.envelope import Envelope, success
+from priormail.models.schemas.priority import ClassifyData, ClassifyRequest
 from priormail.services.classifier import Classifier
 from priormail.services.preprocess import build_priority_input
 

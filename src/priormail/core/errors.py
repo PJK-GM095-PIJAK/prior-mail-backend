@@ -59,3 +59,24 @@ class ConfigError(AppError):
 
     code = "internal.unknown"
     http_status = 500
+
+
+class NotFoundError(AppError):
+    """Requested resource does not exist."""
+
+    code = "resource.not_found"
+    http_status = 404
+
+
+class ConflictError(AppError):
+    """Operation conflicts with existing state (e.g. duplicate insert)."""
+
+    code = "resource.conflict"
+    http_status = 409
+
+
+class DatabaseError(AppError):
+    """Database is unreachable or a query failed unexpectedly."""
+
+    code = "service.database_error"
+    http_status = 503

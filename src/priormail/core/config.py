@@ -28,6 +28,12 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # --- Database (Supabase Postgres) ---
+    database_url: str = Field(
+        default="postgresql+asyncpg://postgres:password@localhost:5432/postgres",
+        description="Async Postgres connection string (asyncpg driver).",
+    )
+
     # --- ML model ---
     # HuggingFace URI in the form ``hf://{repo_id}/{version}`` (BACKEND_INTEGRATION_GUIDE §2).
     priority_model_uri: str = Field(default="hf://insanar/priormail-priority/v2.0")
