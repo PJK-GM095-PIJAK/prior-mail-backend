@@ -85,10 +85,22 @@ def create_db_engine(
     Called once during FastAPI lifespan startup. The engine must be disposed
     at shutdown (``await engine.dispose()``).
     """
+    connect_args: dict[str, object] = {
+        # Disable asyncpg's prepared-statement cache so connections work through
+        # Supabase's PgBouncer pooler (port 6543, transaction mode) which does
+        # not support named prepared statements.
+        "prepared_statement_cache_size": 0,
+    }
+    if settings.database_ssl:
+        connect_args["ssl"] = True
+
     engine = create_async_engine(
         settings.database_url,
         echo=(settings.environment == "development"),
         pool_pre_ping=True,
+        pool_size=settings.database_pool_size,
+        max_overflow=5,  # burst headroom; total cap = pool_size + 5
+        connect_args=connect_args,
     )
     session_factory = async_sessionmaker(
         engine,
