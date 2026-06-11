@@ -28,6 +28,20 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # --- Database (Supabase Postgres) ---
+    database_url: str = Field(
+        default="postgresql+asyncpg://postgres:password@localhost:5432/postgres",
+        description="Async Postgres connection string (asyncpg driver).",
+    )
+    database_ssl: bool = Field(
+        default=True,
+        description="Require SSL for DB connection. Set DATABASE_SSL=false for local plain Postgres.",
+    )
+    database_pool_size: int = Field(
+        default=5,
+        description="SQLAlchemy pool_size. Keep low on Supabase free tier (60-connection cap).",
+    )
+
     # --- ML model ---
     # HuggingFace URI in the form ``hf://{repo_id}/{version}`` (BACKEND_INTEGRATION_GUIDE §2).
     priority_model_uri: str = Field(default="hf://insanar/priormail-priority/v2.0")
