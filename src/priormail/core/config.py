@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     # HuggingFace URI in the form ``hf://{repo_id}/{version}`` (BACKEND_INTEGRATION_GUIDE §2).
     priority_model_uri: str = Field(default="hf://insanar/priormail-priority/v2.0")
     priority_model_revision: str = Field(default="main")
+    # Phishing model URI (public). Use ``hf://owner/repo/version``.
+    phishing_model_uri: str = Field(default="hf://faizhuda/priormail-phishing/v1.0")
 
     # --- App ---
     # NoDecode: take the raw env string (comma-separated) instead of JSON-decoding it;
@@ -58,7 +60,7 @@ class Settings(BaseSettings):
 
     @field_validator("priority_model_uri")
     @classmethod
-    def _validate_model_uri(cls, value: str) -> str:
+    def _validate_priority_uri(cls, value: str) -> str:
         if not value.startswith(HF_URI_PREFIX):
             raise ValueError(
                 f"priority_model_uri must start with {HF_URI_PREFIX!r} "
@@ -68,6 +70,19 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"priority_model_uri must include a version subfolder, "
                 f"e.g. 'hf://insanar/priormail-priority/v2.0'; got {value!r}"
+            )
+        return value
+
+    @field_validator("phishing_model_uri")
+    @classmethod
+    def _validate_phishing_uri(cls, value: str) -> str:
+        if not value.startswith(HF_URI_PREFIX):
+            raise ValueError(
+                f"phishing_model_uri must start with {HF_URI_PREFIX!r} (e.g. 'hf://faizhuda/priormail-phishing/v1.0'); got {value!r}"
+            )
+        if not parse_hf_uri(value)[1]:
+            raise ValueError(
+                f"phishing_model_uri must include a version subfolder, e.g. 'hf://faizhuda/priormail-phishing/v1.0'; got {value!r}"
             )
         return value
 
@@ -84,10 +99,17 @@ class Settings(BaseSettings):
         """The HF repo id, e.g. ``insanar/priormail-priority``."""
         return parse_hf_uri(self.priority_model_uri)[0]
 
-    @property
     def priority_model_version(self) -> str:
         """The version subfolder, e.g. ``v2.0``."""
         return parse_hf_uri(self.priority_model_uri)[1]
+
+    def phishing_model_repo_id(self) -> str:
+        """The HF repo id for the phishing model, e.g. ``faizhuda/priormail-phishing``."""
+        return parse_hf_uri(self.phishing_model_uri)[0]
+
+    def phishing_model_version(self) -> str:
+        """The version subfolder for the phishing model, e.g. ``v1.0``."""
+        return parse_hf_uri(self.phishing_model_uri)[1]
 
 
 def parse_hf_uri(uri: str) -> tuple[str, str]:
