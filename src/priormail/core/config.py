@@ -99,14 +99,17 @@ class Settings(BaseSettings):
         """The HF repo id, e.g. ``insanar/priormail-priority``."""
         return parse_hf_uri(self.priority_model_uri)[0]
 
+    @property
     def priority_model_version(self) -> str:
         """The version subfolder, e.g. ``v2.0``."""
         return parse_hf_uri(self.priority_model_uri)[1]
 
+    @property
     def phishing_model_repo_id(self) -> str:
         """The HF repo id for the phishing model, e.g. ``faizhuda/priormail-phishing``."""
         return parse_hf_uri(self.phishing_model_uri)[0]
 
+    @property
     def phishing_model_version(self) -> str:
         """The version subfolder for the phishing model, e.g. ``v1.0``."""
         return parse_hf_uri(self.phishing_model_uri)[1]

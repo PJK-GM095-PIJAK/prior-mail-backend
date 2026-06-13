@@ -16,7 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from priormail.api import classify, health
+from priormail.api import classify, health, phishing
 from priormail.core.config import get_settings
 from priormail.core.errors import AppError, ValidationError
 from priormail.core.logging import configure_logging, get_logger
