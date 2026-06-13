@@ -15,6 +15,7 @@ from priormail.services.classifier import Classifier
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +28,17 @@ def get_priority_classifier(request: Request) -> Classifier:
     if classifier is None:
         raise ModelUnavailableError("Priority model is not loaded.")
     return classifier
+
+
+def get_phishing_classifier(request: Request) -> tuple[AutoModelForSequenceClassification, AutoTokenizer]:
+    """Return the loaded phishing model and tokenizer, or raise 503 if unavailable."""
+    model = getattr(request.app.state, "phishing_model", None)
+    tokenizer = getattr(request.app.state, "phishing_tokenizer", None)
+    if model is None or tokenizer is None:
+        raise ModelUnavailableError("Phishing model is not loaded.")
+    return model, tokenizer
+
+
 
 
 async def get_db(request: Request) -> AsyncGenerator[AsyncSession, None]:

@@ -47,6 +47,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # ML model — raises ModelUnavailableError on failure → app refuses to start.
     app.state.priority_classifier = load_priority_classifier(settings)
+    # Load public phishing model (no token needed)
+    from priormail.services.phishing import load_phishing_classifier
+    app.state.phishing_model, app.state.phishing_tokenizer = load_phishing_classifier(settings)
+    logger.info("phishing_model_loaded")
 
     logger.info("app_started", environment=settings.environment)
     yield
@@ -70,6 +74,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(classify.router)
+    app.include_router(phishing.router)  # new phishing endpoint
     app.include_router(health.router)
 
     _register_exception_handlers(app)
