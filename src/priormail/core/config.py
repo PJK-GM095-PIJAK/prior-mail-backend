@@ -42,6 +42,30 @@ class Settings(BaseSettings):
         description="SQLAlchemy pool_size. Keep low on Supabase free tier (60-connection cap).",
     )
 
+    # --- Supabase Auth ---
+    supabase_url: str = Field(
+        default="https://xxxxx.supabase.co",
+        description="Supabase project URL.",
+    )
+    supabase_jwt_secret: str = Field(
+        default="your-jwt-secret",
+        description="Supabase JWT secret for token validation.",
+    )
+
+    # --- Google OAuth ---
+    google_client_id: str = Field(
+        default="xxxxx.apps.googleusercontent.com",
+        description="Google OAuth client ID.",
+    )
+    google_client_secret: str = Field(
+        default="GOCSPX-xxxxx",
+        description="Google OAuth client secret.",
+    )
+    google_redirect_uri: str = Field(
+        default="http://localhost:3000/auth/callback",
+        description="Google OAuth redirect URI (must match Google Console config).",
+    )
+
     # --- ML model ---
     # HuggingFace URI in the form ``hf://{repo_id}/{version}`` (BACKEND_INTEGRATION_GUIDE §2).
     priority_model_uri: str = Field(default="hf://insanar/priormail-priority/v2.0")

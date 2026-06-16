@@ -95,7 +95,15 @@ mypy_path = "src"
 
 # Third-party libraries without type stubs.
 [[tool.mypy.overrides]]
-module = ["transformers.*", "torch.*", "huggingface_hub.*"]
+module = [
+    "transformers.*",
+    "torch.*",
+    "huggingface_hub.*",
+    "google.*",
+    "google_auth_oauthlib.*",
+    "googleapiclient.*",
+    "jose.*",
+]
 ignore_missing_imports = true
 
 # --- Pytest ---

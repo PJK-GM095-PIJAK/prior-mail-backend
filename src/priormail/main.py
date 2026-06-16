@@ -16,7 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from priormail.api import classify, health, phishing
+from priormail.api import auth, classify, emails, health, phishing, sync_router
 from priormail.core.config import get_settings
 from priormail.core.errors import AppError, ValidationError
 from priormail.core.logging import configure_logging, get_logger
@@ -73,8 +73,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.include_router(auth.router)
     app.include_router(classify.router)
-    app.include_router(phishing.router)  # new phishing endpoint
+    app.include_router(phishing.router)
+    app.include_router(emails.router)
+    app.include_router(sync_router.router)
     app.include_router(health.router)
 
     _register_exception_handlers(app)

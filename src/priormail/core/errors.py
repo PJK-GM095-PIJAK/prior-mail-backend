@@ -80,3 +80,24 @@ class DatabaseError(AppError):
 
     code = "service.database_error"
     http_status = 503
+
+
+class AuthenticationError(AppError):
+    """JWT is missing, expired, or invalid."""
+
+    code = "auth.invalid_token"
+    http_status = 401
+
+
+class AuthorizationError(AppError):
+    """User does not have permission for this action."""
+
+    code = "auth.forbidden"
+    http_status = 403
+
+
+class GmailApiError(AppError):
+    """Gmail API call failed."""
+
+    code = "service.gmail_error"
+    http_status = 502
