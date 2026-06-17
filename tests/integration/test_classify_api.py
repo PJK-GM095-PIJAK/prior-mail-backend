@@ -55,12 +55,15 @@ class TestClassifyPriority:
 
 class TestModelHealth:
     async def test_reports_version(self, client: AsyncClient) -> None:
-        resp = await client.get("/api/v1/_health/models")
+        resp = await client.get("/api/v1/health/models")
         assert resp.status_code == 200
-        assert resp.json()["data"] == {"priority": "v-test"}
+        data = resp.json()["data"]
+        assert "priority_classifier" in data
+        assert "phishing_detector" in data
 
     async def test_503_when_unavailable(self, app_without_model: FastAPI) -> None:
         transport = ASGITransport(app=app_without_model)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            resp = await ac.get("/api/v1/_health/models")
-        assert resp.status_code == 503
+            resp = await ac.get("/api/v1/health/models")
+        assert resp.status_code == 200
+        assert resp.json()["data"]["priority_classifier"]["status"] == "unavailable"

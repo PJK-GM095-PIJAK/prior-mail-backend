@@ -16,11 +16,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from priormail.api import auth, classify, emails, health, phishing, sync_router
+from priormail.api import analyze, classify, health, phishing
 from priormail.core.config import get_settings
 from priormail.core.errors import AppError, ValidationError
 from priormail.core.logging import configure_logging, get_logger
-from priormail.models.orm.db import create_db_engine
 from priormail.models.schemas.envelope import failure
 from priormail.services.classifier import load_priority_classifier
 
@@ -32,31 +31,35 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Load models and initialise DB on startup; clean up on shutdown."""
+    """Load models and initialise pipeline on startup."""
     settings = get_settings()
     configure_logging(
         log_level=settings.log_level,
         json_logs=settings.environment != "development",
     )
 
-    # Database — engine + session factory stored on app.state for DI (core/deps.py).
-    engine, session_factory = create_db_engine(settings)
-    app.state.db_engine = engine
-    app.state.db_session_factory = session_factory
-    logger.info("db_engine_created", database_url="***")
-
     # ML model — raises ModelUnavailableError on failure → app refuses to start.
     app.state.priority_classifier = load_priority_classifier(settings)
+
     # Load public phishing model (no token needed)
     from priormail.services.phishing import load_phishing_classifier
     app.state.phishing_model, app.state.phishing_tokenizer = load_phishing_classifier(settings)
     logger.info("phishing_model_loaded")
 
+    from priormail.agents.graph import build_graph
+    from priormail.services.llm_client import build_llm_client
+
+    app.state.pipeline = build_graph(
+        priority_classifier=app.state.priority_classifier,
+        phishing_model=app.state.phishing_model,
+        phishing_tokenizer=app.state.phishing_tokenizer,
+        phishing_version=app.state.priority_classifier.version,
+        llm_client=build_llm_client(),
+    )
+
     logger.info("app_started", environment=settings.environment)
     yield
 
-    # Shutdown
-    await engine.dispose()
     logger.info("app_stopping")
 
 
@@ -73,11 +76,9 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    app.include_router(auth.router)
+    app.include_router(analyze.router)
     app.include_router(classify.router)
     app.include_router(phishing.router)
-    app.include_router(emails.router)
-    app.include_router(sync_router.router)
     app.include_router(health.router)
 
     _register_exception_handlers(app)

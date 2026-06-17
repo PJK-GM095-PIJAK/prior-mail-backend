@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+
 def load_phishing_classifier(settings) -> tuple[AutoModelForSequenceClassification, AutoTokenizer]:
     """Load the phishing detection model using configuration.
     The repository URI and version are read from ``settings.phishing_model_uri``.
     Returns the model and its tokenizer.
     """
-    from priormail.core.config import get_settings
     # Ensure we have a Settings instance (allow passing Settings or use global)
     if isinstance(settings, dict):
         # fallback if a dict is passed (unlikely)

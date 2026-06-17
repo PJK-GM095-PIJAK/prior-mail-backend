@@ -28,42 +28,14 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # --- Database (Supabase Postgres) ---
-    database_url: str = Field(
-        default="postgresql+asyncpg://postgres:password@localhost:5432/postgres",
-        description="Async Postgres connection string (asyncpg driver).",
-    )
-    database_ssl: bool = Field(
-        default=True,
-        description="Require SSL for DB connection. Set DATABASE_SSL=false for local plain Postgres.",
-    )
-    database_pool_size: int = Field(
-        default=5,
-        description="SQLAlchemy pool_size. Keep low on Supabase free tier (60-connection cap).",
-    )
-
-    # --- Supabase Auth ---
-    supabase_url: str = Field(
-        default="https://xxxxx.supabase.co",
-        description="Supabase project URL.",
-    )
-    supabase_jwt_secret: str = Field(
-        default="your-jwt-secret",
-        description="Supabase JWT secret for token validation.",
-    )
-
-    # --- Google OAuth ---
-    google_client_id: str = Field(
-        default="xxxxx.apps.googleusercontent.com",
-        description="Google OAuth client ID.",
-    )
-    google_client_secret: str = Field(
-        default="GOCSPX-xxxxx",
-        description="Google OAuth client secret.",
-    )
-    google_redirect_uri: str = Field(
-        default="http://localhost:3000/auth/callback",
-        description="Google OAuth redirect URI (must match Google Console config).",
+    # --- LLM ---
+    groq_api_key: str = Field(default="", description="Groq API key for summarization + task extraction.")
+    llm_model: str = Field(
+        default="llama-3.1-8b-instant",
+        description=(
+            "Groq model ID. Use 'llama-3.1-8b-instant' for dev/testing (14.4K RPD free tier). "
+            "Switch to 'llama-3.3-70b-versatile' for demo day (better quality, 1K RPD is fine for a demo)."
+        ),
     )
 
     # --- ML model ---

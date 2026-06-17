@@ -6,6 +6,7 @@ Provides a simple POST that returns whether the email is phishing and the confid
 from __future__ import annotations
 
 import asyncio
+
 from fastapi import APIRouter, Depends, Request
 
 from priormail.core.deps import get_phishing_classifier

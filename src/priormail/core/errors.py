@@ -75,29 +75,12 @@ class ConflictError(AppError):
     http_status = 409
 
 
-class DatabaseError(AppError):
-    """Database is unreachable or a query failed unexpectedly."""
+class EmlParseError(AppError):
+    """Raised when the uploaded .eml file cannot be parsed."""
+    http_status = 400
+    code = "email.parse_failed"
 
-    code = "service.database_error"
-    http_status = 503
-
-
-class AuthenticationError(AppError):
-    """JWT is missing, expired, or invalid."""
-
-    code = "auth.invalid_token"
-    http_status = 401
-
-
-class AuthorizationError(AppError):
-    """User does not have permission for this action."""
-
-    code = "auth.forbidden"
-    http_status = 403
-
-
-class GmailApiError(AppError):
-    """Gmail API call failed."""
-
-    code = "service.gmail_error"
-    http_status = 502
+class FileTooLargeError(AppError):
+    """Raised when the uploaded file exceeds the size limit."""
+    http_status = 413
+    code = "email.file_too_large"
