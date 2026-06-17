@@ -8,11 +8,12 @@
 
 This is the **backend** repo of PriorMail. It owns:
 
-- Gmail API integration (OAuth, sync, delta updates via `historyId`)
+- `.eml` file parsing (Python stdlib `email` module)
 - FastAPI REST API consumed by `prior-mail-frontend`
-- LangGraph multi-agent pipeline (`classify → detect_phishing → summarize → extract_tasks`)
-- Background sync workers
-- Hosting: **Render** (Web Service + Background Worker)
+- LangGraph pipeline (`detect_phishing → classify_priority → summarize → extract_tasks`)
+- Hosting: **Render** (Web Service only — no background worker)
+
+The backend is **fully stateless**: it receives an `.eml`, processes it in memory, returns the result. No database, no user sessions.
 
 ### Sibling repos
 
@@ -37,9 +38,9 @@ git submodule update --init --recursive
 
 **Files you must check before coding:**
 - `./docs/API_CONTRACT.md` — before adding/modifying any endpoint
-- `./docs/DATA_MODELS.md` — before creating any DB query, schema, or Pydantic model
+- `./docs/DATA_MODELS.md` — before creating or modifying any Pydantic model
 - `./docs/ARCHITECTURE.md` — for cross-repo flow understanding
-- `./docs/SECURITY.md` — before touching auth, secrets, or PII
+- `./docs/SECURITY.md` — before touching file upload handling, secrets, or logging
 
 **Updating the submodule:**
 ```bash
@@ -47,7 +48,7 @@ git submodule update --remote docs
 git add docs && git commit -m "chore: bump docs submodule"
 ```
 
-**Schema/contract changes:** open a PR in `prior-mail-docs` first, get sign-off, then bump the submodule pointer here.
+**Contract changes:** open a PR in `prior-mail-docs` first, get sign-off, then bump the submodule pointer here.
 
 ---
 
@@ -63,7 +64,6 @@ When uncertain — ask, don't assume:
 
 - Ambiguous requirement → ask the user.
 - Library not in the locked stack → propose first, do not auto-install.
-- Schema change → write a new migration; propose the matching spec update in `prior-mail-docs`.
 - Cost-sensitive operation (hosted LLM call, model download) → confirm first.
 
 ---
@@ -78,20 +78,15 @@ When uncertain — ask, don't assume:
 - **Pydantic v2** — use `BaseModel`, never v1 syntax
 - **Uvicorn** — ASGI server
 - **HTTPX** — for all outbound HTTP (never `requests`)
+- **python-multipart** — for `.eml` file upload parsing
 
-### Data
-- **SQLAlchemy 2.x** async, talking to Supabase Postgres
-- **Alembic** — migrations
-- **Supabase** — Postgres 15 + Auth + Storage (+ Realtime if needed)
-
-### Auth & External
-- **Gmail API** via `google-api-python-client` + `google-auth`
-- **Supabase Auth** for user sessions (JWT validation)
+### Storage
+- **Supabase Storage** — model checkpoint download at startup only. No Postgres, no Auth, no Vault.
 
 ### AI Orchestration
 - **LangGraph** ≥ 0.2 — primary multi-agent orchestration
 - **LangChain** — only for model wrappers if strictly needed; prefer raw HTTP + LangGraph nodes
-- **Transformers (Hugging Face)** — for loading IndoBERT checkpoints (trained in `prior-mail-model`)
+- **Transformers (Hugging Face)** — for loading DistilBERT checkpoints (trained in `prior-mail-model`)
 - **PyTorch 2.x**
 
 ### Observability & Logging
@@ -115,21 +110,23 @@ prior-mail-backend/
 ├── README.md
 ├── Makefile
 ├── pyproject.toml
-├── alembic.ini
 ├── docs/                      ← submodule → prior-mail-docs
 ├── src/priormail/
 │   ├── api/                   ← FastAPI routers (one file per resource)
+│   │   ├── analyze.py         ← POST /api/v1/emails/analyze
+│   │   └── health.py
 │   ├── agents/                ← LangGraph nodes + graph definitions
-│   │   ├── classify.py
-│   │   ├── phishing.py
-│   │   ├── summarize.py
-│   │   ├── extract_tasks.py
+│   │   ├── state.py           ← Pydantic pipeline state model
+│   │   ├── parse_eml.py       ← parse raw .eml bytes → structured fields
+│   │   ├── preprocess.py      ← strip HTML, normalize text
+│   │   ├── phishing.py        ← phishing detection node
+│   │   ├── classify.py        ← priority classification node
+│   │   ├── summarize.py       ← LLM summarization node
+│   │   ├── extract_tasks.py   ← LLM task extraction node
 │   │   └── graph.py           ← assembles the LangGraph
-│   ├── models/                ← SQLAlchemy + Pydantic schemas
-│   ├── services/              ← integration layer (gmail_client, model_loader, supabase)
+│   ├── models/                ← Pydantic schemas (request/response only, no ORM)
+│   ├── services/              ← integration layer (model_loader, llm_client)
 │   ├── core/                  ← config, deps, errors, logging
-│   └── workers/               ← background sync jobs
-├── alembic/versions/
 └── tests/
     ├── unit/
     ├── integration/
@@ -143,18 +140,12 @@ prior-mail-backend/
 > **Full spec:** `./docs/API_CONTRACT.md`. All JSON responses use envelope `{ data, error, meta }`. Error codes are machine-readable strings (see `core/errors.py`), not HTTP status alone.
 
 ```
-POST   /api/v1/auth/google/callback     ← OAuth callback
-POST   /api/v1/sync                     ← trigger manual sync
-GET    /api/v1/emails                   ← ?priority=high&limit=50&cursor=...
-GET    /api/v1/emails/{id}              ← single email + full summary
-POST   /api/v1/emails/{id}/reclassify   ← re-run AI on demand
-GET    /api/v1/tasks                    ← extracted tasks across emails
-PATCH  /api/v1/tasks/{id}               ← mark complete / edit
-GET    /api/v1/stats                    ← dashboard metrics
-DELETE /api/v1/account                  ← GDPR-style data wipe
+POST   /api/v1/emails/analyze   ← upload .eml, returns full classification result
+GET    /api/v1/health            ← liveness check
+GET    /api/v1/health/models     ← model load status + versions
 ```
 
-All endpoints (except OAuth callback) require `Authorization: Bearer <supabase_jwt>`.
+**No authentication required.** The backend holds no user data.
 
 ---
 
@@ -163,11 +154,11 @@ All endpoints (except OAuth callback) require `Authorization: Bearer <supabase_j
 Models are **trained in `prior-mail-model`** and consumed here at inference time.
 
 ### Contract with `prior-mail-model`
-- Trained checkpoints are uploaded to Supabase Storage under `models/{model_name}/{version}/`
+- Trained checkpoints are on HuggingFace Hub (current) or Supabase Storage (intended)
 - This repo references them via env vars:
-  - `PRIORITY_MODEL_URI` — e.g. `supabase://models/priority/v3/checkpoint.bin`
-  - `PHISHING_MODEL_URI` — e.g. `supabase://models/phishing/v2/checkpoint.bin`
-- Checkpoint format and required tokenizer config: see `./docs/ML_PIPELINE.md`
+  - `PRIORITY_MODEL_URI`
+  - `PHISHING_MODEL_URI`
+- Checkpoint format: see `./docs/ML_PIPELINE.md`
 
 ### Loading strategy
 - Models loaded **once at app startup** (FastAPI lifespan event), never per-request.
@@ -177,18 +168,18 @@ Models are **trained in `prior-mail-model`** and consumed here at inference time
 ### Inference rules
 - All inference runs in-process (no separate model server for MVP).
 - Latency budget: p95 < 500 ms per email on Render Standard instance.
-- Batch when possible (process multiple emails in one forward pass during sync).
+- CPU-bound inference must be offloaded with `asyncio.to_thread` — never block the event loop directly in a route handler.
 
 ---
 
 ## 8. Coding Conventions
 
-- **Async by default** for I/O (handlers, DB calls, HTTP calls).
+- **Async by default** for I/O (handlers, HTTP calls).
 - **Type hints required**; `mypy --strict` must pass.
 - **Dependency injection** via FastAPI `Depends(...)` — no module-level globals for state.
 - **Errors:** raise typed exceptions from `core/errors.py`, never bare `Exception`.
 - **Settings:** `pydantic-settings`, read from env, validate on startup. App must refuse to boot if config is invalid.
-- **Logging:** structured JSON via `structlog`. Never log full email bodies.
+- **Logging:** structured JSON via `structlog`. Never log full email bodies (snippet only, max 100 chars).
 - **File naming:** `snake_case.py`. Constants: `UPPER_SNAKE_CASE`.
 - **Tests:** `test_<module>.py`, one test class per scenario.
 
@@ -198,16 +189,11 @@ Models are **trained in `prior-mail-model`** and consumed here at inference time
 - PRs: must pass CI (lint + type + test) before merge
 - No direct pushes to `main`
 
-### Migrations
-- Every schema change = new Alembic migration file
-- **Never** modify an already-applied migration; create a new one
-- Filename: `YYYYMMDD_HHMM_<description>.py`
-- Always include `downgrade()`, even if it's just `pass` with a comment
-
 ### LangGraph
 - Each node is a pure function: `(State) -> State` (or `(State) -> Partial[State]`)
-- Side effects (DB writes, API calls) only in clearly-named nodes (e.g. `persist_email`)
+- No side effects anywhere — no DB writes, no fire-and-forget calls inside nodes
 - State schema is a Pydantic model in `agents/state.py`
+- Pipeline is sequential: `parse_eml → preprocess → detect_phishing → (short-circuit if phishing) → classify_priority → summarize → extract_tasks`
 - Tests must cover each node independently before testing the full graph
 
 ---
@@ -217,20 +203,18 @@ Models are **trained in `prior-mail-model`** and consumed here at inference time
 > Full policy: `./docs/SECURITY.md`. Backend-specific musts below.
 
 ### Must
-- Encrypt Gmail OAuth refresh tokens at rest (Supabase Vault)
-- Delete raw email bodies after 30 days (keep only hash + AI-derived fields)
-- Log every email content access in `audit_log` table
-- Use **minimum** Gmail scope: `gmail.readonly` for MVP. No `send`, no `modify`
-- Validate Supabase JWT on every protected endpoint
-- Rate-limit per user on all endpoints (use `slowapi` or middleware)
+- Enforce 5 MB file size limit on upload — reject before parsing
+- Validate that the uploaded file is parseable as `message/rfc822`; do not trust `Content-Type` header
+- Never log full email body (snippet only, max 100 chars)
+- Never send email content to any third party except the chosen LLM provider
+- Never include email content in error messages or stack traces
+- Rate-limit by IP on all endpoints (use `slowapi` or middleware)
 - All secrets from env vars; loaded via `pydantic-settings`
 
 ### Never
-- Do **not** log full email bodies (snippet only, max 100 chars in logs)
-- Do **not** send email content to any third-party API except the chosen LLM provider (once decided)
-- Do **not** include email content in error messages or stack traces
-- Do **not** commit `.env`, OAuth client secrets, or model checkpoints
-- Do **not** request elevated Gmail scopes in MVP
+- Do **not** write email content to disk, a database, or a cache
+- Do **not** commit `.env` or model checkpoints
+- Do **not** use `requests` (sync) — always `httpx.AsyncClient`
 
 ---
 
@@ -238,14 +222,12 @@ Models are **trained in `prior-mail-model`** and consumed here at inference time
 
 - Do **not** add a dependency without proposing it
 - Do **not** swap items in "Tech Stack (LOCKED)"
-- Do **not** use Microsoft Graph / Outlook / EmailEngine — Gmail only for MVP
-- Do **not** use `requests` (sync) — always `httpx.AsyncClient`
+- Do **not** add any database (SQLAlchemy, Alembic, Supabase Postgres) — the backend is intentionally stateless
+- Do **not** add authentication or session management — no user accounts
 - Do **not** use Pydantic v1 syntax (`class Config:`, `@validator`)
-- Do **not** modify existing migrations
-- Do **not** put model inference in route handlers without async offload if it's CPU-bound (use `asyncio.to_thread`)
+- Do **not** put model inference in route handlers without `asyncio.to_thread` offload
 - Do **not** hardcode URLs, keys, or model URIs — always config
 - Do **not** silently swallow exceptions
-- Do **not** ship code that calls undocumented Gmail API endpoints
 
 ---
 
@@ -255,8 +237,7 @@ A feature is done when **all** apply:
 
 - [ ] `ruff check`, `mypy --strict`, `pytest` all pass
 - [ ] New endpoints documented in `./docs/API_CONTRACT.md` (via PR to `prior-mail-docs`)
-- [ ] New DB fields documented in `./docs/DATA_MODELS.md` (same)
-- [ ] Migration written; `alembic upgrade head && alembic downgrade -1` both work locally
+- [ ] New response fields documented in `./docs/DATA_MODELS.md` (same)
 - [ ] Unit tests ≥ 70% coverage on new code
 - [ ] Integration test for happy path
 - [ ] Errors handled via typed exceptions
@@ -273,9 +254,6 @@ make dev                      # uvicorn with reload
 make test                     # pytest + coverage
 make lint                     # ruff check + mypy --strict
 make format                   # ruff format
-make migrate                  # alembic upgrade head
-make migration name=add_xxx   # generate new migration
-make worker                   # run background sync worker locally
 
 # Submodule
 git submodule update --init --recursive    # after fresh clone
@@ -288,19 +266,18 @@ git submodule update --remote docs         # pull latest shared specs
 
 LLMs: do **not** assume an answer — ask.
 
-- [ ] Summarizer model: hosted LLM (Anthropic / OpenAI) vs local (Llama / Mistral)?
-- [ ] Realtime updates: Supabase Realtime channels vs polling?
-- [ ] Queue: in-process asyncio vs Redis-backed (Upstash)?
+- [ ] Summarizer + task extractor: hosted LLM (Anthropic / OpenAI) vs local (Llama / Mistral)?
+- [ ] `.eml` file size limit: 5 MB confirmed or adjust?
 
 ---
 
 ## 14. Owners
 
-- **Syafiq** — Gmail integration, FastAPI scaffolding, infra/deployment
+- **Syafiq** — FastAPI scaffolding, `.eml` parsing, infra/deployment
 - **Insan** — Model loading & inference integration
 - **Faiz** — Phishing detector integration, security review
 - **Ridjal** — LangGraph nodes (shared with Faiz)
 
 ---
 
-*Last updated: 2026-05-25*
+*Last updated: 2026-06-17*
