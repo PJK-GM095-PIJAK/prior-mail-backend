@@ -3,7 +3,7 @@
 # See CLAUDE.md §12 for command reference
 # ─────────────────────────────────────────────────────────────
 
-.PHONY: install dev test lint format migrate migration worker clean
+.PHONY: install dev test lint format clean
 
 # Install all dependencies (including dev)
 install:
@@ -27,17 +27,6 @@ format:
 	ruff format src/ tests/
 	ruff check --fix src/ tests/
 
-# Run database migrations
-migrate:
-	alembic upgrade head
-
-# Generate a new migration (usage: make migration name=add_xxx)
-migration:
-	alembic revision --autogenerate -m "$(name)"
-
-# Run background sync worker locally
-worker:
-	python -m priormail.workers.sync_worker
 
 # Clean generated files
 clean:

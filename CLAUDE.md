@@ -266,8 +266,8 @@ git submodule update --remote docs         # pull latest shared specs
 
 LLMs: do **not** assume an answer — ask.
 
-- [ ] Summarizer + task extractor: hosted LLM (Anthropic / OpenAI) vs local (Llama / Mistral)?
-- [ ] `.eml` file size limit: 5 MB confirmed or adjust?
+- [x] Summarizer + task extractor: hosted LLM (Groq API / Llama 3.x)
+- [x] `.eml` file size limit: 5 MB limit enforced
 
 ---
 

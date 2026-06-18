@@ -1,7 +1,7 @@
 """FastAPI application entrypoint.
 
 Loads the priority model once at startup (fail loud — the app refuses to boot
-if the model can't load) and exposes the classify + health endpoints. All
+if the model can't load) and exposes the analyze + health endpoints. All
 responses use the standard envelope (API_CONTRACT.md §1).
 """
 
@@ -15,8 +15,11 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
-from priormail.api import analyze, classify, health, phishing
+from priormail.api import analyze, health
 from priormail.core.config import get_settings
 from priormail.core.errors import AppError, ValidationError
 from priormail.core.logging import configure_logging, get_logger
@@ -27,6 +30,9 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 logger = get_logger(__name__)
+
+# Rate limiter — keyed by client IP (CLAUDE.md §9, API_CONTRACT.md §4).
+limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
@@ -68,6 +74,9 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="PriorMail Backend", version="0.1.0", lifespan=lifespan)
 
+    # Attach the rate limiter to app.state so slowapi can find it.
+    app.state.limiter = limiter
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -77,8 +86,6 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(analyze.router)
-    app.include_router(classify.router)
-    app.include_router(phishing.router)
     app.include_router(health.router)
 
     _register_exception_handlers(app)
@@ -103,6 +110,16 @@ def _register_exception_handlers(app: FastAPI) -> None:
         body = failure(err.code, err.message, details={"errors": errors})
         return JSONResponse(
             status_code=err.http_status, content=jsonable_encoder(body)
+        )
+
+    @app.exception_handler(RateLimitExceeded)
+    async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+        retry_after = getattr(exc, "retry_after", 60)
+        body = failure("rate_limit.ip", "Rate limit exceeded. Try again later.")
+        return JSONResponse(
+            status_code=429,
+            content=jsonable_encoder(body),
+            headers={"Retry-After": str(retry_after)},
         )
 
 

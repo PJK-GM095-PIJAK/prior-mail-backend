@@ -1,26 +1,37 @@
 """POST /api/v1/emails/analyze — upload a .eml and get the full analysis."""
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Request, UploadFile
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from priormail.core.errors import FileTooLargeError
+from priormail.core.logging import get_logger
 from priormail.models.schemas.analysis import AnalysisResult, ExtractedTask
 from priormail.models.schemas.envelope import Envelope, success
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/emails", tags=["analyze"])
 
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
+PIPELINE_TIMEOUT_SECONDS = 30  # SECURITY.md §7
+
+
+# Shared limiter instance — must match the one attached to app.state in main.py.
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/analyze", response_model=Envelope[AnalysisResult])
+@limiter.limit("30/hour")
 async def analyze_email(
-    file: UploadFile,
     request: Request,
+    file: UploadFile,
 ) -> Envelope[AnalysisResult]:
     """Parse a .eml file and run the full LangGraph pipeline."""
-    import asyncio
 
     # 1. Size check — reject before reading the whole file.
     contents = await file.read()
@@ -33,10 +44,25 @@ async def analyze_email(
         from priormail.core.errors import ModelUnavailableError
         raise ModelUnavailableError("Pipeline is not initialised.")
 
-    # 3. Run the pipeline (CPU-bound parts offloaded inside nodes).
+    # 3. Run the pipeline with a 30s timeout (SECURITY.md §7).
     from priormail.agents.state import PipelineState
     initial_state = PipelineState(raw_eml=contents)
-    result_state: PipelineState = await asyncio.to_thread(pipeline.invoke, initial_state)
+    try:
+        raw_result = await asyncio.wait_for(
+            asyncio.to_thread(pipeline.invoke, initial_state),
+            timeout=PIPELINE_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        logger.error("pipeline_timeout", timeout=PIPELINE_TIMEOUT_SECONDS)
+        from priormail.core.errors import AppError
+        raise AppError(
+            "Processing timed out.",
+            code="service.timeout",
+            http_status=504,
+        )
+
+    # LangGraph returns a dict; convert back to PipelineState for typed access.
+    result_state = PipelineState(**raw_result) if isinstance(raw_result, dict) else raw_result
 
     # 4. Build the response.
     result = AnalysisResult(
