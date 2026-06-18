@@ -28,18 +28,14 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # --- Database (Supabase Postgres) ---
-    database_url: str = Field(
-        default="postgresql+asyncpg://postgres:password@localhost:5432/postgres",
-        description="Async Postgres connection string (asyncpg driver).",
-    )
-    database_ssl: bool = Field(
-        default=True,
-        description="Require SSL for DB connection. Set DATABASE_SSL=false for local plain Postgres.",
-    )
-    database_pool_size: int = Field(
-        default=5,
-        description="SQLAlchemy pool_size. Keep low on Supabase free tier (60-connection cap).",
+    # --- LLM ---
+    groq_api_key: str = Field(default="", description="Groq API key for summarization + task extraction.")
+    llm_model: str = Field(
+        default="llama-3.1-8b-instant",
+        description=(
+            "Groq model ID. Use 'llama-3.1-8b-instant' for dev/testing (14.4K RPD free tier). "
+            "Switch to 'llama-3.3-70b-versatile' for demo day (better quality, 1K RPD is fine for a demo)."
+        ),
     )
 
     # --- ML model ---

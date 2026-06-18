@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
 
 def predict_phishing(
     model: AutoModelForSequenceClassification,

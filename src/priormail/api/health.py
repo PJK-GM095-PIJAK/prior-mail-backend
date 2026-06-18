@@ -1,37 +1,37 @@
-"""Health endpoints."""
+"""Health endpoints (API_CONTRACT.md §3)."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
-from priormail.core.deps import get_db, get_priority_classifier
-from priormail.models.schemas.envelope import Envelope, success
-from priormail.services.classifier import Classifier
+from priormail.models.schemas.envelope import success
 
-router = APIRouter(prefix="/api/v1/_health", tags=["health"])
+router = APIRouter(prefix="/api/v1", tags=["health"])
 
-
-@router.get("/models", response_model=Envelope[dict[str, str]])
-def model_health(
-    classifier: Classifier = Depends(get_priority_classifier),
-) -> Envelope[dict[str, str]]:
-    """Report loaded model versions (BACKEND_INTEGRATION_GUIDE §2).
-
-    503 (``service.model_unavailable``) if a model failed to load.
-    """
-    return success({"priority": classifier.version})
+limiter = Limiter(key_func=get_remote_address)
 
 
-@router.get("/db", response_model=Envelope[dict[str, str]])
-async def db_health(
-    session: AsyncSession = Depends(get_db),
-) -> Envelope[dict[str, str]]:
-    """Verify database connectivity.
+@router.get("/health")
+@limiter.limit("600/hour")
+async def health(request: Request):
+    """Basic liveness check. Returns 200 if the app is up."""
+    return success({"status": "ok"})
 
-    Runs a simple ``SELECT 1`` query. Returns 503 (``service.database_error``)
-    if the database is unreachable.
-    """
-    await session.execute(text("SELECT 1"))
-    return success({"status": "connected"})
+
+@router.get("/health/models")
+@limiter.limit("600/hour")
+async def health_models(request: Request):
+    """Report loaded model versions."""
+    classifier = getattr(request.app.state, "priority_classifier", None)
+    phishing = getattr(request.app.state, "phishing_model", None)
+    return success({
+        "priority_classifier": {
+            "status": "loaded" if classifier else "unavailable",
+            "version": classifier.version if classifier else None,
+        },
+        "phishing_detector": {
+            "status": "loaded" if phishing else "unavailable",
+        },
+    })

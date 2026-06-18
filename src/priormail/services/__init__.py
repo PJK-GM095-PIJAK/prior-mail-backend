@@ -1,1 +1,1 @@
-"""Services — business logic and external integrations (Gmail, Supabase, ML models)."""
+"""Services — ML model loading, inference, and LLM integration."""

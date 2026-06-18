@@ -1,4 +1,4 @@
 """Agents — LangGraph email processing pipeline.
 
-Pipeline: preprocess → [classify ∥ phishing] → summarize → extract_tasks → persist
+Pipeline: parse_eml → preprocess → detect_phishing → classify_priority → summarize → extract_tasks
 """

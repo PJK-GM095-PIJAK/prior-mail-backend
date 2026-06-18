@@ -75,8 +75,12 @@ class ConflictError(AppError):
     http_status = 409
 
 
-class DatabaseError(AppError):
-    """Database is unreachable or a query failed unexpectedly."""
+class EmlParseError(AppError):
+    """Raised when the uploaded .eml file cannot be parsed."""
+    http_status = 400
+    code = "email.parse_failed"
 
-    code = "service.database_error"
-    http_status = 503
+class FileTooLargeError(AppError):
+    """Raised when the uploaded file exceeds the size limit."""
+    http_status = 413
+    code = "email.file_too_large"
