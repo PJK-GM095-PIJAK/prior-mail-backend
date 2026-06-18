@@ -77,7 +77,13 @@ async def analyze_email(
         priority=result_state.priority,
         priority_confidence=result_state.priority_confidence,
         summary=result_state.summary,
-        tasks=[ExtractedTask(**t) for t in result_state.tasks],
+        tasks=[
+            ExtractedTask(
+                description=t.get("description", ""),
+                due_date=None if t.get("due_date") in (None, "null", "") else t.get("due_date"),
+            )
+            for t in result_state.tasks
+        ],
         processed_at=datetime.now(UTC),
         model_versions={
             "phishing": result_state.phishing_model_version,
